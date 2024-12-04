@@ -1,0 +1,14 @@
+{
+  "name": "notion-parser",
+  "version": "1.0.0",
+  "description": "Notion Parser with Vue Frontend and Express Backend",
+  "scripts": {
+    "frontend": "cd frontend && npm run dev",
+    "backend": "cd backend && npm run dev",
+    "dev": "concurrently --prefix-colors \"blue.bold,green.bold\" --prefix \"[{name}]\" --names \"backend,frontend\" \"npm run backend\" \"npm run frontend\"",
+    "install-all": "npm install && cd frontend && npm install && cd ../backend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

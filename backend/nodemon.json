@@ -1,0 +1,11 @@
+{
+  "watch": ["src"],
+  "ext": ".ts,.js",
+  "ignore": ["src/**/*.spec.ts"],
+  "exec": "ts-node ./src/index.ts",
+  "events": {
+    "restart": "echo \"[Server] Restarting...\"",
+    "crash": "echo \"[Server] Crashed - waiting for changes before restart\""
+  },
+  "delay": "1500"
+} 

@@ -1,0 +1,35 @@
+name: Staging Deployment
+
+on:
+  push:
+    branches: [ develop ]
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Install Dependencies
+        run: |
+          cd frontend
+          npm install
+          cd ../backend
+          npm install
+          
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm run build
+          
+      - name: Run Tests
+        run: |
+          cd frontend
+          npm run test
+          cd ../backend
+          npm run test 

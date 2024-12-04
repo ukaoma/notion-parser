@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notion Export Parser</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --accent: #646cff;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            color: var(--accent);
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .upload-section {
+            background-color: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--accent);
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .drop-zone:hover {
+            background-color: rgba(100, 108, 255, 0.1);
+        }
+
+        .output-section {
+            background-color: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .json-viewer {
+            background-color: var(--bg-primary);
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 400px;
+        }
+
+        button {
+            background-color: var(--accent);
+            color: var(--text-primary);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 1rem 0;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: var(--accent);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Notion Export Parser</h1>
+        
+        <div class="upload-section">
+            <div class="drop-zone" id="dropZone">
+                <p>Drag and drop your Notion export ZIP file here</p>
+                <p>or</p>
+                <button onclick="document.getElementById('fileInput').click()">Select File</button>
+                <input type="file" id="fileInput" hidden accept=".zip">
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing your export...</p>
+        </div>
+
+        <div class="output-section" id="outputSection">
+            <h2>Processed Output</h2>
+            <div class="json-viewer" id="jsonViewer"></div>
+            <button onclick="downloadJson()" style="margin-top: 1rem;">Download JSON</button>
+        </div>
+    </div>
+
+    <script>
+        let processedData = null;
+
+        function setupDropZone() {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+
+            dropZone.ondragover = (e) => {
+                e.preventDefault();
+                dropZone.style.backgroundColor = 'rgba(100, 108, 255, 0.1)';
+            };
+
+            dropZone.ondragleave = () => {
+                dropZone.style.backgroundColor = '';
+            };
+
+            dropZone.ondrop = (e) => {
+                e.preventDefault();
+                dropZone.style.backgroundColor = '';
+                const file = e.dataTransfer.files[0];
+                if (file.type === 'application/zip' || file.name.endsWith('.zip')) {
+                    processFile(file);
+                }
+            };
+
+            fileInput.onchange = () => {
+                const file = fileInput.files[0];
+                if (file) {
+                    processFile(file);
+                }
+            };
+        }
+
+        async function processFile(file) {
+            const formData = new FormData();
+            formData.append('zipFile', file);
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('outputSection').style.display = 'none';
+
+            try {
+                const response = await fetch('/process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                processedData = await response.json();
+                displayOutput(processedData);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error processing file');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function displayOutput(data) {
+            const jsonViewer = document.getElementById('jsonViewer');
+            jsonViewer.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            document.getElementById('outputSection').style.display = 'block';
+        }
+
+        function downloadJson() {
+            if (!processedData) return;
+
+            const blob = new Blob([JSON.stringify(processedData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'notion-export-processed.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        setupDropZone();
+    </script>
+</body>
+</html> 
