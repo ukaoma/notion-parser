@@ -1,8 +1,14 @@
 import AdmZip from 'adm-zip';
 import cheerio from 'cheerio';
-import { Document } from './types';
+import { Document, ParsedData } from './types';
 
-export const parseZip = async (zipBuffer: Buffer): Promise<Document[]> => {
+export const parseZip = async (
+  zipBuffer: Buffer,
+  onLog: (message: string) => void,
+  onProgress: (progress: any) => void,
+  onTokenUpdate: (usage: any) => void,
+  signal: AbortSignal
+): Promise<ParsedData> => {
   const zip = new AdmZip(zipBuffer);
   const zipEntries = zip.getEntries();
   
@@ -30,5 +36,12 @@ export const parseZip = async (zipBuffer: Buffer): Promise<Document[]> => {
     }
   }
   
-  return documents;
+  return {
+    documents,
+    tokenUsage: {
+      total: 0,
+      summaries: 0,
+      tags: 0
+    }
+  };
 }; 

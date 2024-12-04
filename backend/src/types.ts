@@ -11,4 +11,18 @@ export interface Document {
 
 export interface ParsedData {
   documents: Document[];
+  tokenUsage?: {
+    total: number;
+    summaries: number;
+    tags: number;
+  };
+}
+
+export interface ProcessingResult {
+  documents: Document[];
+  tokenUsage?: {
+    total: number;
+    summaries: number;
+    tags: number;
+  };
 } 
