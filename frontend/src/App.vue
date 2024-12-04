@@ -1,12 +1,5 @@
-<script lang="ts">
+<script setup lang="ts">
 import FileUpload from './components/FileUpload.vue'
-
-export default {
-  name: 'App',
-  components: {
-    FileUpload
-  }
-}
 </script>
 
 <template>
