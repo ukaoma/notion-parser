@@ -29,3 +29,15 @@ yarn-error.log*
 # System files
 .DS_Store
 Thumbs.db 
+
+# Add to existing .gitignore
+*.zip
+.env
+.env.*
+!.env.example
+
+# Large files
+*.zip
+*.gz
+*.tar
+*.7z 
