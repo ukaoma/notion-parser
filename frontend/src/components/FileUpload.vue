@@ -173,6 +173,9 @@
 <script lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, isRef } from 'vue';
 import { config } from '../config';
+import { useFileStore } from '../store/fileStore';
+import type { ProcessedDocument } from '../store/fileStore';
+import { websocketStore } from '../utils/websocketStore'
 
 interface ServerMessage {
   type: string;
@@ -202,6 +205,7 @@ const MAX_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
 
 export default {
+  name: 'FileUpload',
   setup() {
     // Existing refs
     const fileInput = ref<HTMLInputElement | null>(null);
@@ -474,6 +478,26 @@ export default {
                     documentsAssembled: documents.length,
                     processingComplete: processingComplete.value,
                     parsedDataExists: !!parsedData.value?.documents
+                  });
+                }
+
+                if (documents.length > 0) {
+                  const endTime = Date.now();
+                  const processingTime = endTime - startTime.value;
+                  
+                  fileStore.saveBatch({
+                    documentCount: documents.length,
+                    totalTokens: totalTokens.value,
+                    cost: runningCost.value,
+                    documents: documents as ProcessedDocument[],
+                    title: documents[0]?.title || 'Untitled Batch',
+                    processingTime: `${Math.floor(processingTime / 60000)}m ${Math.floor((processingTime % 60000) / 1000)}s`,
+                    stats: {
+                      avgTokensPerDoc: Math.round(totalTokens.value / documents.length),
+                      totalProcessingTime: totalProcessingTime.value,
+                      startTime: startTime.value,
+                      endTime: endTime
+                    }
                   });
                 }
               }
@@ -1124,6 +1148,31 @@ export default {
     ], () => {
       debugComputedProps();
     }, { immediate: true });
+
+    const fileStore = useFileStore();
+
+    onMounted(() => {
+      const socket = websocketStore.socket
+      if (socket) {
+        socket.onmessage = handleWebSocketMessage
+      }
+    })
+
+    onUnmounted(() => {
+      // Only remove message handler, don't close the socket
+      if (websocketStore.socket) {
+        websocketStore.socket.onmessage = null
+      }
+    })
+
+    // Update the send function to use the shared socket
+    const sendMessage = (message: any) => {
+      if (websocketStore.socket && websocketStore.socket.readyState === WebSocket.OPEN) {
+        websocketStore.socket.send(JSON.stringify(message))
+      } else {
+        console.error('WebSocket is not connected')
+      }
+    }
 
     return {
       fileInput,

@@ -22,6 +22,10 @@ class LocalStorageStrategy implements StorageStrategy {
   async clear(): Promise<void> {
     localStorage.clear();
   }
+
+  getType(): string {
+    return 'localStorage';
+  }
 }
 
 class CloudStorageStrategy implements StorageStrategy {
@@ -48,6 +52,39 @@ class CloudStorageStrategy implements StorageStrategy {
   async clear(): Promise<void> {
     // Placeholder for future cloud implementation
   }
+
+  getType(): string {
+    return 'cloud';
+  }
+}
+
+class MemoryStorageStrategy implements StorageStrategy {
+  private storage: Map<string, any>;
+
+  constructor() {
+    this.storage = new Map();
+  }
+
+  async save(key: string, data: any): Promise<void> {
+    this.storage.set(key, JSON.parse(JSON.stringify(data))); // Deep clone for isolation
+  }
+
+  async load(key: string): Promise<any> {
+    const data = this.storage.get(key);
+    return data ? JSON.parse(JSON.stringify(data)) : null;
+  }
+
+  async delete(key: string): Promise<void> {
+    this.storage.delete(key);
+  }
+
+  async clear(): Promise<void> {
+    this.storage.clear();
+  }
+
+  getType(): string {
+    return 'memory';
+  }
 }
 
 export const createStorageStrategy = (config: StorageConfig): StorageStrategy => {
@@ -56,7 +93,11 @@ export const createStorageStrategy = (config: StorageConfig): StorageStrategy =>
       return new LocalStorageStrategy();
     case 'cloud':
       return new CloudStorageStrategy(config);
+    case 'memory':
+      return new MemoryStorageStrategy();
     default:
-      return new LocalStorageStrategy();
+      return config.environment === 'test' 
+        ? new MemoryStorageStrategy() 
+        : new LocalStorageStrategy();
   }
 }; 

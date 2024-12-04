@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import type { ProcessedBatch, ProcessedDocument } from '../types';
 import { createStorageStrategy } from '../utils/storageFactory';
-import type { StorageConfig } from '../types/storage';
+import type { StorageConfig, StorageStrategy } from '../types/storage';
 import { getStorageConfig } from '../config/storage';
 
 export const useFileStore = defineStore('file', {
@@ -9,7 +9,7 @@ export const useFileStore = defineStore('file', {
     processedBatches: [] as ProcessedBatch[],
     currentBatch: null as ProcessedBatch | null,
     storageConfig: null as StorageConfig | null,
-    storageStrategy: null as any,
+    storageStrategy: null as StorageStrategy | null,
   }),
 
   actions: {
@@ -66,7 +66,8 @@ export const useFileStore = defineStore('file', {
     },
 
     async syncWithCloud() {
-      if (this.storageConfig?.type === 'cloud') {
+      if (this.storageConfig?.type === 'cloud' && 
+          this.storageConfig?.environment === 'production') {
         // Future cloud sync implementation
         console.log('Cloud sync will be implemented');
       }

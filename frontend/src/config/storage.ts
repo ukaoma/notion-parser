@@ -4,11 +4,21 @@ const defaultConfig: StorageConfig = {
   type: 'localStorage',
   persistenceKey: 'notion-processed-batches',
   maxBatchSize: 1000,
-  compression: false
+  environment: 'development'
 };
 
 export const getStorageConfig = async (): Promise<StorageConfig> => {
   const env = import.meta.env;
+  const environment = env.MODE || 'development';
+  
+  // Use memory storage for tests
+  if (environment === 'test') {
+    return {
+      ...defaultConfig,
+      type: 'memory',
+      environment: 'test'
+    };
+  }
   
   if (env.VITE_STORAGE_TYPE) {
     return {
@@ -21,11 +31,14 @@ export const getStorageConfig = async (): Promise<StorageConfig> => {
       } : undefined,
       persistenceKey: env.VITE_PERSISTENCE_KEY || defaultConfig.persistenceKey,
       maxBatchSize: Number(env.VITE_MAX_BATCH_SIZE) || defaultConfig.maxBatchSize,
-      compression: env.VITE_STORAGE_COMPRESSION === 'true'
+      environment
     };
   }
   
-  return defaultConfig;
+  return {
+    ...defaultConfig,
+    environment
+  };
 };
 
 export const initializeStorage = async () => {

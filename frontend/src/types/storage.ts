@@ -3,6 +3,7 @@ export interface StorageStrategy {
   load: (key: string) => Promise<any>;
   delete: (key: string) => Promise<void>;
   clear: () => Promise<void>;
+  getType: () => string;
 }
 
 export interface CloudStorageConfig {
@@ -13,9 +14,9 @@ export interface CloudStorageConfig {
 }
 
 export interface StorageConfig {
-  type: 'localStorage' | 'indexedDB' | 'cloud';
+  type: 'localStorage' | 'indexedDB' | 'cloud' | 'memory';
   cloudConfig?: CloudStorageConfig;
   persistenceKey?: string;
   maxBatchSize?: number;
-  compression?: boolean;
+  environment?: 'development' | 'test' | 'production';
 } 
