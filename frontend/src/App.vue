@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { shallowRef, onMounted, onUnmounted } from 'vue'
 import FileUpload from './components/FileUpload.vue'
 import History from './components/History.vue'
 import { websocketStore } from './utils/websocketStore'
 
-const currentComponent = ref(FileUpload)
-const activeTab = ref('upload')
+const currentComponent = shallowRef(FileUpload)
+const activeTab = shallowRef('upload')
 
 onMounted(() => {
   websocketStore.connect()
