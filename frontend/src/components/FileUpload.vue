@@ -509,43 +509,43 @@ export default {
 
           case 'log':
             if (data.message) {
-              processingLogs.value.push(data.message);
-              
-              // Update token costs from log messages
-              const tokenMatch = data.message.match(/Token usage for summary - Prompt: (\d+), Completion: (\d+)/);
-              if (tokenMatch) {
-                const promptTokens = parseInt(tokenMatch[1]) || 0;
-                const completionTokens = parseInt(tokenMatch[2]) || 0;
-                // Ensure we're working with numbers
-                if (!isNaN(promptTokens) && !isNaN(completionTokens)) {
-                  totalTokens.value = (totalTokens.value || 0) + promptTokens + completionTokens;
-                  // Calculate cost ($0.01/1K prompt, $0.03/1K completion)
-                  const promptCost = (promptTokens * 0.01) / 1000;
-                  const completionCost = (completionTokens * 0.03) / 1000;
-                  runningCost.value = (runningCost.value || 0) + promptCost + completionCost;
-                  if (DEBUG) {
-                    console.log('Token update:', {
-                      promptTokens,
-                      completionTokens,
-                      totalTokens: totalTokens.value,
-                      runningCost: runningCost.value
-                    });
-                  }
+                // Add timestamp while keeping existing message
+                const timestamp = new Date().toLocaleTimeString();
+                processingLogs.value.push(`[${timestamp}] ${data.message}`);
+                
+                // Keep all existing token cost tracking
+                const tokenMatch = data.message.match(/Token usage for summary - Prompt: (\d+), Completion: (\d+)/);
+                if (tokenMatch) {
+                    const promptTokens = parseInt(tokenMatch[1]) || 0;
+                    const completionTokens = parseInt(tokenMatch[2]) || 0;
+                    if (!isNaN(promptTokens) && !isNaN(completionTokens)) {
+                        totalTokens.value = (totalTokens.value || 0) + promptTokens + completionTokens;
+                        const promptCost = (promptTokens * 0.01) / 1000;
+                        const completionCost = (completionTokens * 0.03) / 1000;
+                        runningCost.value = (runningCost.value || 0) + promptCost + completionCost;
+                        if (DEBUG) {
+                            console.log('Token update:', {
+                                promptTokens,
+                                completionTokens,
+                                totalTokens: totalTokens.value,
+                                runningCost: runningCost.value
+                            });
+                        }
+                    }
                 }
-              }
 
-              // Update progress
-              const progressMatch = data.message.match(/Progress: (\d+)\/(\d+) files/);
-              if (progressMatch) {
-                processedFiles.value = parseInt(progressMatch[1]);
-                totalFiles.value = parseInt(progressMatch[2]);
-              }
+                // Keep all existing progress tracking
+                const progressMatch = data.message.match(/Progress: (\d+)\/(\d+) files/);
+                if (progressMatch) {
+                    processedFiles.value = parseInt(progressMatch[1]);
+                    totalFiles.value = parseInt(progressMatch[2]);
+                }
 
-              // Update current file
-              const fileMatch = data.message.match(/Found title: ([^\n]+)/);
-              if (fileMatch) {
-                currentDocument.value = { title: fileMatch[1].trim() };
-              }
+                // Keep all existing file tracking
+                const fileMatch = data.message.match(/Found title: ([^\n]+)/);
+                if (fileMatch) {
+                    currentDocument.value = { title: fileMatch[1].trim() };
+                }
             }
             break;
 
