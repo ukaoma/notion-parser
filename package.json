@@ -9,7 +9,10 @@
     "install-all": "npm install && cd frontend && npm install && cd ../backend && npm install"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
