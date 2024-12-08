@@ -594,14 +594,21 @@ export default {
               processingComplete.value = true;
               uploading.value = false;
               
-              // Force reactivity update
-              nextTick(() => {
-                console.log('State after completion:', {
-                  documentsSet: !!parsedData.value?.documents,
-                  documentsLength: parsedData.value?.documents?.length,
-                  processingComplete: processingComplete.value,
-                  uploading: uploading.value
-                });
+              // Add this - emit to websocket store
+              websocketStore.addToHistory({
+                id: crypto.randomUUID(),
+                timestamp: Date.now(),
+                status: 'completed',
+                processedFiles: processedFiles.value,
+                totalFiles: totalFiles.value,
+                cost: runningCost.value,
+                totalTokens: totalTokens.value
+              });
+
+              console.log('Job added to history:', {
+                files: processedFiles.value,
+                tokens: totalTokens.value,
+                cost: runningCost.value
               });
             }
             break;
@@ -1172,6 +1179,22 @@ export default {
       } else {
         console.error('WebSocket is not connected')
       }
+    }
+
+    if (processingComplete.value) {
+      fileStore.addJobToHistory({
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        status: 'completed',
+        totalFiles: totalFiles.value,
+        processedFiles: processedFiles.value,
+        cost: runningCost.value,
+        totalTokens: totalTokens.value,
+        documents: parsedData.value?.documents?.map(doc => ({
+          title: doc.title,
+          id: doc.document_id
+        })) || []
+      })
     }
 
     return {

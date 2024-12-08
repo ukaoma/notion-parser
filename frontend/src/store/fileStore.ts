@@ -4,19 +4,37 @@ import { createStorageStrategy } from '../utils/storageFactory';
 import type { StorageConfig, StorageStrategy } from '../types/storage';
 import { getStorageConfig } from '../config/storage';
 
+interface JobHistoryItem {
+  id: string
+  timestamp: string
+  status: string
+  totalFiles: number
+  processedFiles: number
+  cost: number
+  totalTokens: number
+  documents: {
+    title: string
+    id: string
+  }[]
+}
+
 export const useFileStore = defineStore('file', {
   state: () => ({
     processedBatches: [] as ProcessedBatch[],
     currentBatch: null as ProcessedBatch | null,
     storageConfig: null as StorageConfig | null,
     storageStrategy: null as StorageStrategy | null,
+    jobHistory: [] as JobHistoryItem[],
   }),
 
   actions: {
     async initialize() {
       this.storageConfig = await getStorageConfig();
       this.storageStrategy = createStorageStrategy(this.storageConfig);
-      await this.loadBatches();
+      await Promise.all([
+        this.loadBatches(),
+        this.loadJobHistory()
+      ]);
     },
 
     async saveBatch(batch: Omit<ProcessedBatch, 'id' | 'timestamp'>) {
@@ -71,6 +89,39 @@ export const useFileStore = defineStore('file', {
         // Future cloud sync implementation
         console.log('Cloud sync will be implemented');
       }
-    }
+    },
+
+    addJobToHistory(job: Omit<JobHistoryItem, 'id' | 'timestamp'>) {
+      const newJob: JobHistoryItem = {
+        ...job,
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+      };
+      
+      this.jobHistory.unshift(newJob);
+      this.persistJobHistory();
+    },
+
+    async persistJobHistory() {
+      try {
+        await this.storageStrategy?.save(
+          'notion-job-history',
+          this.jobHistory
+        );
+      } catch (error) {
+        console.error('Error saving job history:', error);
+      }
+    },
+
+    async loadJobHistory() {
+      try {
+        const stored = await this.storageStrategy?.load('notion-job-history');
+        if (stored) {
+          this.jobHistory = stored;
+        }
+      } catch (error) {
+        console.error('Error loading job history:', error);
+      }
+    },
   }
 }); 

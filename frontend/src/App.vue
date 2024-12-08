@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { shallowRef, onMounted, onUnmounted } from 'vue'
+import { markRaw, shallowRef, onMounted, onUnmounted } from 'vue'
 import FileUpload from './components/FileUpload.vue'
 import History from './components/History.vue'
 import { websocketStore } from './utils/websocketStore'
 
-const currentComponent = shallowRef(FileUpload)
+const currentComponent = shallowRef(markRaw(FileUpload))
 const activeTab = shallowRef('upload')
 
 onMounted(() => {
@@ -16,8 +16,14 @@ onUnmounted(() => {
 })
 
 const switchTab = (tab: string) => {
+  console.log('Switching to tab:', tab)
   activeTab.value = tab
-  currentComponent.value = tab === 'upload' ? FileUpload : History
+  currentComponent.value = tab === 'upload' ? markRaw(FileUpload) : markRaw(History)
+  
+  if (tab === 'history') {
+    console.log('Loading history...')
+    websocketStore.loadHistory()
+  }
 }
 </script>
 

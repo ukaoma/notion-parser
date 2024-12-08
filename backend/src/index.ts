@@ -222,7 +222,8 @@ app.post('/upload', async (req, res) => {
       type: 'chunks_complete',
       sentChunks,
       totalChunks,
-      total: result.documents.length
+      total: result.documents.length,
+      tokenUsage: result.tokenUsage
     })}\n\n`);
 
     // End the response properly
