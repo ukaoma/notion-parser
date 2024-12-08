@@ -1,6 +1,17 @@
 import { ref } from 'vue'
 
-interface ProcessingJob {
+export interface ProcessedDocument {
+  document_id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  source_url: string;
+  related_documents: string[] | null;
+  last_edited_time: string;
+  summary: string;
+}
+
+export interface ProcessingJob {
   id: string;
   timestamp: number;
   status: 'completed' | 'processing';
@@ -8,6 +19,9 @@ interface ProcessingJob {
   totalFiles: number;
   cost: number;
   totalTokens: number;
+  output?: {
+    documents: ProcessedDocument[];
+  };
 }
 
 export const websocketStore = {
@@ -42,32 +56,31 @@ export const websocketStore = {
   },
 
   addToHistory(job: ProcessingJob) {
-    console.log('Adding job to history:', job)
-    // Add to front of array
-    this.processingHistory.value = [job, ...this.processingHistory.value]
-    // Store in localStorage
-    this.saveHistory()
-    console.log('Current history:', this.processingHistory.value)
+    console.log('Adding job to history:', job);
+    // Ensure we're creating a new array reference
+    this.processingHistory.value = [job, ...this.processingHistory.value];
+    this.saveHistory();
   },
 
   loadHistory() {
     try {
-      const stored = localStorage.getItem('processingHistory')
+      const stored = localStorage.getItem('processingHistory');
       if (stored) {
-        this.processingHistory.value = JSON.parse(stored)
-        console.log('Loaded history:', this.processingHistory.value)
+        const parsed = JSON.parse(stored);
+        this.processingHistory.value = parsed;
+        console.log('Loaded history:', this.processingHistory.value);
       }
     } catch (error) {
-      console.error('Error loading history:', error)
-      this.processingHistory.value = []
+      console.error('Error loading history:', error);
+      this.processingHistory.value = [];
     }
   },
 
   saveHistory() {
     try {
-      localStorage.setItem('processingHistory', JSON.stringify(this.processingHistory.value))
+      localStorage.setItem('processingHistory', JSON.stringify(this.processingHistory.value));
     } catch (error) {
-      console.error('Error saving history:', error)
+      console.error('Error saving history:', error);
     }
   },
 

@@ -204,6 +204,16 @@ interface ServerMessage {
 const MAX_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
 
+// Add these type definitions at the top
+interface Document {
+  document_id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  last_edited_time: string;
+  summary: string;
+}
+
 export default {
   name: 'FileUpload',
   setup() {
@@ -590,26 +600,30 @@ export default {
             }
             
             if (data.data?.documents) {
-              parsedData.value = { documents: data.data.documents };
-              processingComplete.value = true;
-              uploading.value = false;
+              console.log('Complete data received:', data.data); // Debug log
               
-              // Add this - emit to websocket store
-              websocketStore.addToHistory({
+              const processedJob = {
                 id: crypto.randomUUID(),
                 timestamp: Date.now(),
-                status: 'completed',
+                status: 'completed' as const,
                 processedFiles: processedFiles.value,
                 totalFiles: totalFiles.value,
                 cost: runningCost.value,
-                totalTokens: totalTokens.value
-              });
+                totalTokens: totalTokens.value,
+                output: {
+                  documents: data.data.documents
+                }
+              };
 
-              console.log('Job added to history:', {
-                files: processedFiles.value,
-                tokens: totalTokens.value,
-                cost: runningCost.value
-              });
+              // Store in websocketStore
+              websocketStore.addToHistory(processedJob);
+              
+              // Update local state
+              parsedData.value = { documents: data.data.documents };
+              processingComplete.value = true;
+              uploading.value = false;
+
+              console.log('Job stored in history:', processedJob); // Debug log
             }
             break;
         }
@@ -656,8 +670,8 @@ export default {
       });
     });
 
-    // Add time estimation function (simplified)
-    const calculateEstimatedTime = (fileCount) => {
+    // Fix the calculateEstimatedTime parameter type
+    const calculateEstimatedTime = (fileCount: number) => {
       console.log('Calculating time for files:', fileCount);
       if (!fileCount || fileCount <= 0) {
         console.log('Invalid file count, returning empty string');
@@ -787,8 +801,8 @@ export default {
       }
     };
 
-    // Add to the documents_chunk case before processing
-    const validateAndStoreChunk = (chunk, index) => {
+    // Fix validateAndStoreChunk parameter types
+    const validateAndStoreChunk = (chunk: Document[], index: number) => {
       if (!checkMemoryUsage()) {
         processingLogs.value.push('⚠️ Warning: High memory usage detected');
       }
@@ -1196,6 +1210,27 @@ export default {
         })) || []
       })
     }
+
+    // Fix the Performance type error by adding a custom type declaration
+    declare global {
+      interface Performance {
+        memory?: {
+          usedJSHeapSize: number;
+          totalJSHeapSize: number;
+          jsHeapSizeLimit: number;
+        };
+      }
+    }
+
+    // Add the missing handleWebSocketMessage function
+    const handleWebSocketMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleServerMessage(data);
+      } catch (error) {
+        console.error('Error handling WebSocket message:', error);
+      }
+    };
 
     return {
       fileInput,
