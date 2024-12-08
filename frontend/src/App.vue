@@ -24,7 +24,7 @@ const switchTab = (tab: string) => {
 <template>
   <div class="min-h-screen bg-gray-900 text-white">
     <!-- Header with Description -->
-    <header class="border-b border-gray-800 mb-6">
+    <header class="border-b border-gray-800 mb-0">
       <div class="max-w-4xl mx-auto px-4 py-6 text-center">
         <div class="flex flex-col items-center space-y-4 mb-4">
           <img 
