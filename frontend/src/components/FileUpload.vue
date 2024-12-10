@@ -214,6 +214,18 @@ interface Document {
   summary: string;
 }
 
+declare global {
+  interface Window {
+    performance: Performance & {
+      memory?: {
+        usedJSHeapSize: number;
+        totalJSHeapSize: number;
+        jsHeapSizeLimit: number;
+      };
+    };
+  }
+}
+
 export default {
   name: 'FileUpload',
   setup() {
@@ -243,6 +255,48 @@ export default {
     const DEBUG = true;  // Enable logging
     const estimatedTime = ref('');
     const estimatedTimeRemaining = ref('');
+
+    // Add these refs near other refs
+    const tokenUpdates = ref<{
+      timestamp: number;
+      tokens: number;
+      cost: number;
+    }[]>([]);
+
+    const updateEstimatedTime = () => {
+      if (!startTime.value || !processedFiles.value || !totalFiles.value || !uploading.value) {
+        estimatedTimeRemaining.value = '';
+        return;
+      }
+      
+      const elapsed = (Date.now() - startTime.value) / 1000;
+      const rate = processedFiles.value / elapsed;
+      if (rate === 0) {
+        estimatedTimeRemaining.value = '';
+        return;
+      }
+      
+      const remaining = (totalFiles.value - processedFiles.value) / rate;
+      if (remaining <= 0) {
+        estimatedTimeRemaining.value = '';
+        return;
+      }
+      
+      const minutes = Math.floor(remaining / 60);
+      const seconds = Math.floor(remaining % 60);
+      
+      estimatedTimeRemaining.value = minutes > 0 
+        ? `~${minutes}m ${seconds}s`
+        : `~${seconds}s`;
+    };
+
+    // Add a watch to update the time estimate when relevant values change
+    watch(
+      [processedFiles, totalFiles, uploading],
+      () => {
+        updateEstimatedTime();
+      }
+    );
 
     // Add chunk tracking
     const chunksReceived = ref<number>(0);
@@ -283,10 +337,18 @@ export default {
     // Upload handling
     const uploadFile = async (file: File) => {
       try {
-        // Reset states
+        // Reset all states
         uploading.value = true;
+        processingComplete.value = false;
+        processedFiles.value = 0;
+        totalFiles.value = 0;
+        parsedData.value = {};
         processingLogs.value = [];
         startTime.value = Date.now();
+        runningCost.value = 0;
+        totalTokens.value = 0;
+        tokenUpdates.value = []; // Reset token tracking
+        currentDocument.value = null;
         
         // Check server connection first
         const apiUrl = await config.apiUrl();
@@ -297,22 +359,22 @@ export default {
         
         const formData = new FormData();
         formData.append('zipFile', file);
-
+        
         const response = await fetch(`${apiUrl}/upload`, {
           method: 'POST',
-          body: formData
+          body: formData,
+          credentials: 'include'
         });
-
+        
         if (!response.ok) {
           throw new Error(`Upload failed: ${response.statusText}`);
         }
-
+        
         if (!response.body) {
           throw new Error('No response body received');
         }
 
         await handleServerStream(response.body.getReader());
-        
       } catch (error) {
         console.error('Upload error:', error);
         processingLogs.value.push('❌ Upload failed. Please try again.');
@@ -376,6 +438,7 @@ export default {
 
           case 'tokenUpdate':
             if (DEBUG) console.log('Token update:', data);
+            
             if (data.usage) {
               // Handle direct token update message
               if (data.usage.total && data.usage.cost) {
@@ -390,6 +453,10 @@ export default {
                 const cost = (promptTokens * 0.01 + completionTokens * 0.03) / 1000;
                 runningCost.value = (runningCost.value || 0) + cost;
               }
+              
+              // Let websocket store track the update
+              websocketStore.handleTokenUpdate(data);
+              
               if (DEBUG) {
                 console.log('Token state updated:', {
                   totalTokens: totalTokens.value,
@@ -519,77 +586,56 @@ export default {
 
           case 'log':
             if (data.message) {
-                // Add timestamp while keeping existing message
-                const timestamp = new Date().toLocaleTimeString();
-                processingLogs.value.push(`[${timestamp}] ${data.message}`);
+              // Add timestamp
+              const timestamp = new Date().toLocaleTimeString();
+              processingLogs.value.push(`[${timestamp}] ${data.message}`);
+              
+              // Handle token updates from log messages
+              const tokenMatch = data.message.match(/Token usage for summary - Prompt: (\d+), Completion: (\d+)/);
+              if (tokenMatch) {
+                const promptTokens = parseInt(tokenMatch[1]);
+                const completionTokens = parseInt(tokenMatch[2]);
                 
-                // Keep all existing token cost tracking
-                const tokenMatch = data.message.match(/Token usage for summary - Prompt: (\d+), Completion: (\d+)/);
-                if (tokenMatch) {
-                    const promptTokens = parseInt(tokenMatch[1]) || 0;
-                    const completionTokens = parseInt(tokenMatch[2]) || 0;
-                    if (!isNaN(promptTokens) && !isNaN(completionTokens)) {
-                        totalTokens.value = (totalTokens.value || 0) + promptTokens + completionTokens;
-                        const promptCost = (promptTokens * 0.01) / 1000;
-                        const completionCost = (completionTokens * 0.03) / 1000;
-                        runningCost.value = (runningCost.value || 0) + promptCost + completionCost;
-                        if (DEBUG) {
-                            console.log('Token update:', {
-                                promptTokens,
-                                completionTokens,
-                                totalTokens: totalTokens.value,
-                                runningCost: runningCost.value
-                            });
-                        }
-                    }
+                if (!isNaN(promptTokens) && !isNaN(completionTokens)) {
+                  const newTokens = promptTokens + completionTokens;
+                  const newCost = (promptTokens * 0.01 + completionTokens * 0.03) / 1000;
+                  
+                  // Update totals
+                  totalTokens.value += newTokens;
+                  runningCost.value += newCost;
+                  
+                  if (DEBUG) {
+                    console.log('Token update from log:', {
+                      promptTokens,
+                      completionTokens,
+                      newTokens,
+                      newCost,
+                      totalTokens: totalTokens.value,
+                      runningCost: runningCost.value
+                    });
+                  }
                 }
-
-                // Keep all existing progress tracking
-                const progressMatch = data.message.match(/Progress: (\d+)\/(\d+) files/);
-                if (progressMatch) {
-                    processedFiles.value = parseInt(progressMatch[1]);
-                    totalFiles.value = parseInt(progressMatch[2]);
-                }
-
-                // Keep all existing file tracking
-                const fileMatch = data.message.match(/Found title: ([^\n]+)/);
-                if (fileMatch) {
-                    currentDocument.value = { title: fileMatch[1].trim() };
-                }
+              }
             }
             break;
 
           case 'progress':
-            console.log('Raw progress data:', JSON.stringify(data, null, 2));
-            
-            // Try both data structures
-            const progressData = data.data?.progress || data.progress;
-            console.log('Progress data:', progressData);
-            
-            // Handle both percentage and current/total formats
-            if (progressData) {
-              let currentFiles = processedFiles.value;
-              let totalFileCount = totalFiles.value;
-
-              if (progressData.current != null && progressData.total != null) {
-                currentFiles = Number(progressData.current);
-                totalFileCount = Number(progressData.total);
-              } else if (progressData.percentage != null && totalFiles.value > 0) {
-                const percentage = Number(progressData.percentage);
-                if (!isNaN(percentage)) {
-                  currentFiles = Math.round((percentage / 100) * totalFiles.value);
-                }
+            if (data.data?.progress) {
+              const progress = data.data.progress;
+              processedFiles.value = progress.current;
+              totalFiles.value = progress.total;
+              
+              // Add estimated time handling
+              if (progress.estimatedRemaining) {
+                const minutes = Math.floor(progress.estimatedRemaining / 60);
+                const seconds = progress.estimatedRemaining % 60;
+                estimatedTimeRemaining.value = minutes > 0 
+                  ? `~${minutes}m ${seconds}s`
+                  : `~${seconds}s`;
               }
 
-              // Only update if we have valid numbers
-              if (!isNaN(currentFiles) && !isNaN(totalFileCount) && totalFileCount > 0) {
-                processedFiles.value = currentFiles;
-                totalFiles.value = totalFileCount;
-                
-                const remainingFiles = totalFileCount - currentFiles;
-                if (remainingFiles > 0) {
-                  estimatedTimeRemaining.value = calculateEstimatedTime(remainingFiles);
-                }
+              if (data.data.currentDocument) {
+                currentDocument.value = data.data.currentDocument;
               }
             }
             break;
@@ -600,8 +646,12 @@ export default {
             }
             
             if (data.data?.documents) {
-              console.log('Complete data received:', data.data); // Debug log
+              // Update state in correct order
+              parsedData.value = { documents: data.data.documents };
+              processedFiles.value = totalFiles.value;
+              uploading.value = false;
               
+              // Create job record
               const processedJob = {
                 id: crypto.randomUUID(),
                 timestamp: Date.now(),
@@ -610,20 +660,26 @@ export default {
                 totalFiles: totalFiles.value,
                 cost: runningCost.value,
                 totalTokens: totalTokens.value,
-                output: {
-                  documents: data.data.documents
-                }
+                documents: data.data.documents.map((doc: any) => ({
+                  title: doc.title,
+                  id: doc.document_id
+                }))
               };
-
-              // Store in websocketStore
-              websocketStore.addToHistory(processedJob);
               
-              // Update local state
-              parsedData.value = { documents: data.data.documents };
+              // Add to history
+              fileStore.addJobToHistory(processedJob);
+              
+              // Set complete flag last
               processingComplete.value = true;
-              uploading.value = false;
-
-              console.log('Job stored in history:', processedJob); // Debug log
+              
+              if (DEBUG) {
+                console.log('Processing completed:', {
+                  documentsCount: data.data.documents.length,
+                  processedFiles: processedFiles.value,
+                  totalFiles: totalFiles.value,
+                  complete: processingComplete.value
+                });
+              }
             }
             break;
         }
@@ -687,9 +743,10 @@ export default {
 
     // Update computed property
     const overallProgress = computed(() => {
-      if (!uploading.value) return 100;
+      if (processingComplete.value) return 100;
       if (!totalFiles.value || totalFiles.value === 0) return 0;
-      return Math.round((processedFiles.value / totalFiles.value) * 100);
+      const progress = Math.round((processedFiles.value / totalFiles.value) * 100);
+      return Math.min(progress, 99);
     });
 
     // Add scroll handling
@@ -722,17 +779,16 @@ export default {
     // Add computed for processing rate
     const processingRate = computed(() => {
       if (!startTime.value || !processedFiles.value) return '0.00';
-      const elapsed = (Date.now() - startTime.value) / 1000;
-      return (processedFiles.value / elapsed).toFixed(2);
+      const elapsed = Math.max((Date.now() - startTime.value) / 1000, 1);
+      const rate = processedFiles.value / elapsed;
+      return rate.toFixed(2);
     });
 
     // Add totalProcessingTime computation
     const totalProcessingTime = computed(() => {
       if (!startTime.value || !processingComplete.value) return '0s';
-      const totalSeconds = Math.floor((Date.now() - startTime.value) / 1000);
-      const minutes = Math.floor(totalSeconds / 60);
-      const seconds = totalSeconds % 60;
-      return `${minutes}m ${seconds}s`;
+      const totalTime = Date.now() - startTime.value;
+      return `${Math.floor(totalTime / 60000)}m ${Math.floor((totalTime % 60000) / 1000)}s`;
     });
 
     // Update the message parsing function
@@ -786,7 +842,7 @@ export default {
             if (data) {
               handleServerMessage(data);
             } else {
-              processingLogs.value.push('⚠️ Warning: Invalid message format received');
+              processingLogs.value.push('️ Warning: Invalid message format received');
             }
           }
         }
@@ -901,8 +957,9 @@ export default {
       if (DEBUG) {
         console.log('Processing complete changed:', {
           value: newVal,
-          documentsExist: !!parsedData.value?.documents?.length,
-          uploading: uploading.value
+          processedFiles: processedFiles.value,
+          totalFiles: totalFiles.value,
+          hasDocuments: !!parsedData.value?.documents?.length
         });
       }
     });
@@ -1031,7 +1088,7 @@ export default {
       }
     }, { immediate: true });
 
-    // Add near the other debug watches
+    // Add near other debug watches
     watch([
       () => processingComplete.value,
       () => parsedData.value?.documents,
@@ -1128,11 +1185,14 @@ export default {
       time: estimatedTimeRemaining.value,
       processed: processedFiles.value
     }), (newState, oldState) => {
-      if (DEBUG && oldState) {  // Skip initial undefined state
+      if (DEBUG && oldState) {
+        type StateKeys = keyof typeof newState;
+        const changes = (Object.keys(newState) as StateKeys[])
+          .filter(key => newState[key] !== oldState[key]);
         console.log('State transition:', {
           from: oldState,
           to: newState,
-          changes: Object.keys(newState).filter(key => newState[key] !== oldState[key])
+          changes
         });
       }
     }, { deep: true, immediate: true });
@@ -1196,10 +1256,8 @@ export default {
     }
 
     if (processingComplete.value) {
-      fileStore.addJobToHistory({
-        id: crypto.randomUUID(),
-        timestamp: new Date(),
-        status: 'completed',
+      const jobData = {
+        status: 'completed' as const,
         totalFiles: totalFiles.value,
         processedFiles: processedFiles.value,
         cost: runningCost.value,
@@ -1208,21 +1266,11 @@ export default {
           title: doc.title,
           id: doc.document_id
         })) || []
-      })
+      };
+      fileStore.addJobToHistory(jobData);
     }
 
-    // Fix the Performance type error by adding a custom type declaration
-    declare global {
-      interface Performance {
-        memory?: {
-          usedJSHeapSize: number;
-          totalJSHeapSize: number;
-          jsHeapSizeLimit: number;
-        };
-      }
-    }
-
-    // Add the missing handleWebSocketMessage function
+    // Add the WebSocket message handler
     const handleWebSocketMessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
@@ -1231,6 +1279,89 @@ export default {
         console.error('Error handling WebSocket message:', error);
       }
     };
+
+    // Add these watchers near other watch statements
+    if (DEBUG) {
+      watch(() => processingComplete.value, (newVal) => {
+        console.log('Processing complete changed:', {
+          value: newVal,
+          processedFiles: processedFiles.value,
+          totalFiles: totalFiles.value,
+          hasDocuments: !!parsedData.value?.documents?.length
+        });
+      });
+
+      watch([processedFiles, totalFiles], ([processed, total]) => {
+        console.log('Progress values updated:', {
+          processed,
+          total,
+          percentage: overallProgress.value,
+          complete: processingComplete.value
+        });
+      });
+    }
+
+    if (DEBUG) {
+      watch(() => uploading.value, (newVal) => {
+        console.log('Upload state changed:', {
+          uploading: newVal,
+          processedFiles: processedFiles.value,
+          totalFiles: totalFiles.value,
+          complete: processingComplete.value
+        });
+      });
+
+      watch(() => processingComplete.value, (newVal) => {
+        console.log('Processing complete changed:', {
+          complete: newVal,
+          uploading: uploading.value,
+          processedFiles: processedFiles.value,
+          totalFiles: totalFiles.value,
+          hasDocuments: !!parsedData.value?.documents?.length
+        });
+      });
+    }
+
+    // Add this function to track token updates
+    const trackTokenUpdate = (tokens: number, cost: number) => {
+      tokenUpdates.value.push({
+        timestamp: Date.now(),
+        tokens,
+        cost
+      });
+      
+      // Update totals
+      totalTokens.value += tokens;
+      runningCost.value += cost;
+      
+      if (DEBUG) {
+        console.log('Token update tracked:', {
+          tokens,
+          cost,
+          totalTokens: totalTokens.value,
+          runningCost: runningCost.value,
+          updates: tokenUpdates.value.length
+        });
+      }
+    };
+
+    // Add this watch to debug token updates
+    if (DEBUG) {
+      watch([totalTokens, runningCost], ([newTokens, newCost], [oldTokens, oldCost]) => {
+        console.log('Token state changed:', {
+          tokens: {
+            from: oldTokens,
+            to: newTokens,
+            diff: newTokens - (oldTokens || 0)
+          },
+          cost: {
+            from: oldCost,
+            to: newCost,
+            diff: newCost - (oldCost || 0)
+          }
+        });
+      });
+    }
 
     return {
       fileInput,
@@ -1279,4 +1410,3 @@ export default {
   padding-bottom: 2rem;
 }
 </style> 
-}; 
